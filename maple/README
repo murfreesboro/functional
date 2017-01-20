@@ -1,0 +1,2 @@
+In the maple files, we use the big tau "without 1/2" factor.
+Be careful about this in programs!

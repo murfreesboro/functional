@@ -1,0 +1,204 @@
+
+#############################################################################################
+#
+#                            General Algorithms Introduction:
+#
+#############################################################################################
+
+ In this part, let's introduce the general algorithm used in this program.
+
+ The functional and functional derivatives evaluation actually are divided into four 
+ independent processes, that are:
+ close shell situation; (functional in the input file is named with functional_RA_RB)
+ open shell, both RA and RB exist; (named with functional_RA_RB)
+ open shell, only RA exists; (named with functional_RA)
+ open shell, only RB exists; (named with functional_RB)
+ The functionals for close shell situation and open shell situation are sharing the same 
+ name. For the each of the case above, we require that the functional name exists(the name 
+ is fixed for all input maple files).
+
+ Generally to say, the functional derivatives directly calculated for close shell is less 
+ than the open shell case. For example, if the variable of GAA and RA are symmetrical with 
+ GBB and RB; then in the close shell situation, we have:
+ D2F(i, POS_GBB_RB) = D2F(i, GAA_RA)
+ This benefit is from the fact that the alpha variable usually are identical with beta
+ variables in close shell situation. Hence,the POS_GBB_RB will not calculated in the close 
+ shell situation.
+
+ For the functional_RA or the functional_RB, only the alpha or beta part derivatives are
+ evaluated. We note that GAB=0 for functional_RA and functional_RB cases.
+
+ Now let me give the general scheme for the codes:
+ * get the functional and controlling information from the input files (infor.py);
+ * produce the functional derivatives variables lists (generation.py);
+ * loop over the four cases;
+   * create some Temp maple file, and copy the original input maple content into it;
+   * evaluate the functional expression in Temp maple file;
+   * loop over functional derivatives from order 1 to order 3;
+     * create functional derivatives expression in maple file, make label for each
+       functional derivatives expression;
+   * end loop for functional derivatives (all of these are done in maple.py);
+   * execute maple file so that to produce Fortran codes in Temp Fortran file; 
+   * copy the Temp Fortran codes into final Fortran file, and transform the label
+   * into the real codes (fortran.py);
+ * end loop of four cases   
+
+
+ Further optimization consideration:
+ The meaning of optimization for the auto-generated Fortran codes, is that to make a
+ way to reduce the length of codes. For reaching such target, the primary technique 
+ is to share the codes between different modules. For example, if we have two functional
+ derivatives like this:
+ D1F(i, POS_RA) = g(GAA,GBB)*f1(RA)
+ D1F(i, POS_RB) = g(GAA,GBB)*f2(RB)
+ then for the two 1st order functional derivatives, we can calculate g(GAA,GBB) only once
+ then to calculate f1(RA) and f2(RB). However, it's very common in the auto-generated codes
+ that the g(GAA,GBB) are repeatedly calculated for different functional derivatives.
+
+ However, to realize such technique is very difficult. This is because of the "complicity" of
+ the way that functional is expressed, so such realization demands very complicated manipulation
+ of the maple input(such as introduce composite variables and use the chain rule to evaluate
+ the functional derivatives), which stops me to go further.
+
+ However, if you have any good and simple suggestions for the program, please let me know:
+ my email address:
+ fhilosophierr@gmail.com
+ Fenglai Liu 
+
+
+
+
+
+
+#############################################################################################
+#
+#                           Requirement in The Input Maple File:
+#
+#############################################################################################
+
+  * On the top line of the input file, you should specify the functional type with the four
+  keywords below:
+  LDA
+  GGA
+  META
+  LAP (has tau and Laplacian);
+
+  * In the default case, it's acknowledged that the 1st order functional derivatives are
+  symmetrical between alpha and beta density, no matter whether the variables are 
+  symmetrical or not. However, if this is not the case; please use "full" in the first line
+  so that we will calculate all of the functional derivatives for close shell case.
+
+  * Sometimes we are going to evaluate the lambda-dependent functionals. This is specified
+  by the keyword of "lambda" or "lambda_deriv" in the first line. We note that for each of
+  the case, the lambda value is required in the input maple file. More information please
+  see the infor.py.
+
+  * Each input file should have three functional names, which correspond to four different
+  cases; you should remember that in the functional_RA, no beta term should exists, and 
+  the similar things hold for functional_RB. 
+
+
+
+#############################################################################################
+#
+#                                  Notes for The Algorithms:
+#
+#############################################################################################
+  ? Is it possible to distinguish the functionals in close shell case and open shell case?
+    In quantum chemistry, the Hamiltonian usually does not contain the spin-related part, so
+    for the close shell case, the final wave functions should be symmetrical between the alpha 
+    part and beta part. That is to say, if we exchange the variables between alpha components
+    and beta components (RA<->RB, GAA<->GBB, TA<->TB and LA<->LB), the functional expression 
+    should retain same; like the situation below:
+    f(x,y) = f(y,x) if x = y is required
+    This is true even for the functionals which contains the spin-related variables, like 
+    spin-polarized density:
+    rho_p = (RA-RB)/(RA+RB)
+    This variable is very common among the correlation functionals. In the close shell case,
+    RA = RB is required so that we always have rho_p is zero.
+	 
+    For the functional derivatives, Since the 1st order functional derivatives closely related 
+    to the generation of final wave function, hence the 1st functional derivatives should be 
+    symmetrical, too. This is irrelevant to whether spin-densities used or not, since the close 
+    shell demands the equality of the alpha density and beta density, hence the 1st order 
+    functional derivatives must be symmetrical between alpha and beta, else the Fock matrix will 
+    not be identical between alpha and beta. In this case, we can call the 1st functional 
+    derivatives as "variational" derivatives because it's related to the building of wave 
+    functions.
+
+    However, for the higher order functional derivatives, unless in the functional expression
+    the alpha is totally identical to the beta (like in the exchange functional), the functional
+    derivatives are not symmetrical between alpha and beta. This is common for the correlation
+    functional, where it always has the spin-related variables. We can call such functional 
+    derivatives as "perturbative" derivatives since it's closely related to the perturbative 
+    properties like excitation energy etc.
+
+
+
+
+
+
+  ? Why we have three different situations in open shell calculation?
+    The reason for this is to avoid singularity situation, that means; to avoid calculating
+    variables very small so that it may cause infinity in the expression. Like the situation
+    below:
+    t1 = GAA/RA^(4/3);
+    if RA is small enough then t1 will tend to infinity. Hence in open shell we generally
+    consider three cases:
+    RA and RB are all big;
+    RA is big and RB is very small;
+    RB is big and RA is very small 
+
+
+
+
+
+
+  ? Why we only consider the case that RA and RB become very small? Why we do not consider
+    other variables like GAA,TA,LA etc.?
+    For the Gaussian and Slater type of basis set functions, the basic elements is the GTO
+    function or STO function, who have the form below:
+    GTO--> n*x^a*y^b*z^c*exp(-alpha*r^2); 
+    STO--> n*x^a*y^b*z^c*exp(-alpha*r);
+    Here n is some normalization factor, and a,b,c are some integer number and alpha is the
+    scaling factor. The small density (RA or RB) is from that the exponential term is 
+    very small in the common numerical methods. In other variables, such as GAA, TA and LA; 
+    they are relying on the derivatives of density, and because the derivatives of GTO 
+    and STO still containing the exponential term, hence if the density is small enough then 
+    all the other variables will accordingly become very small. They are the same order 
+    infinitesimal. That's the reason why we only consider singularity problem in terms of 
+    density. 
+
+
+
+
+
+  ? How to understand the difference between exchange and correlation functional?
+
+    First of all, so far all the functionals are constructing based on the "stepwise" 
+    method, that is to way; the functionals are building from crude LDA model and then
+    consecutively revised:
+    LDA -> GGA -> META -> ....
+    According to the Jacobi ladder suggested by Perdew. So the functionals generally
+    expressed as:
+    F_xc = \int rho{ F_LDA + F_GGA + F_META + .... } d^3 r
+     
+    For exchange functional, since it obeys the exact scaling condition, which is:
+    E[alpha, beta] = 1/2*E[2*alpha] + 1/2*E[beta]
+    This expression is derived from such fact that for exchange effects that the alpha 
+    part is not mixed with the beta part; hence the exchange functional always take the
+    form below:
+    F_x = F_x[alpha variables] + F_x[beta variables]
+    So it's easy to see that the cross terms for functional derivatives are totally zero. 
+
+    Next, let's consider the correlation functional, which is more complicated. The 
+    correlation functional in general is depending on spin-polarized components, like the  
+    spin-polarized density:
+    rho_p = (RA-RB)/(RA+RB)
+    For the LDA correlation, the reader can refer to the VWN and PW92 correlation functional 
+    for more details. For further GGA and META correlation, the reader can refer to the 
+    specific paper for more information.
+
+
+
+
